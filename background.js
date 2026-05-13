@@ -1,4 +1,4 @@
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 const normalize = (name) =>
   name

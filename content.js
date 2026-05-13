@@ -160,30 +160,45 @@
     });
   };
 
-  // ---------- list page (many cards) ----------
-  const findCards = () =>
+  // ---------- list page / home (many cards with [data-company-name]) ----------
+  const findEntities = () =>
     document.querySelectorAll(
-      `button[data-company-name]:not([${PROCESSED_ATTR}])`
+      `[data-company-name]:not([${PROCESSED_ATTR}])`
     );
 
-  const findCompanyTextInCard = (card) => {
-    return card.querySelector(
-      'span[class*="CompanyNameWithLocationPeriod"], [class*="company"]'
+  const findCompanyTextInCard = (card, companyName) => {
+    const semantic = card.querySelector(
+      'span[class*="CompanyNameWithLocationPeriod"]'
     );
+    if (semantic) return semantic;
+
+    const walker = document.createTreeWalker(card, NodeFilter.SHOW_ELEMENT, null);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.children.length > 0) continue;
+      const t = node.textContent?.trim();
+      if (!t) continue;
+      if (t === companyName || t.startsWith(companyName)) return node;
+    }
+    return null;
   };
 
-  const processCard = (btn) => {
-    btn.setAttribute(PROCESSED_ATTR, "1");
-    const companyName = btn.getAttribute("data-company-name");
+  const processEntity = (el) => {
+    el.setAttribute(PROCESSED_ATTR, "1");
+    const companyName = el.getAttribute("data-company-name");
     if (!companyName) return;
 
-    const card = btn.closest('li[class*="Card_Card"]') || btn.closest("li") || btn.parentElement;
+    const card =
+      el.closest('li[class*="Card_Card"]') ||
+      el.closest("li") ||
+      el.closest('article, [class*="Card"]') ||
+      el.parentElement;
     if (!card) return;
 
-    const target = findCompanyTextInCard(card);
-    if (!target) return;
+    if (card.querySelector(`.${BADGE_CLASS}`)) return;
 
-    if (target.parentElement?.querySelector(`.${BADGE_CLASS}`)) return;
+    const target = findCompanyTextInCard(card, companyName);
+    if (!target) return;
 
     const placeholder = makeBadge({ state: "loading" }, companyName, { compact: true });
     target.insertAdjacentElement("afterend", placeholder);
@@ -199,7 +214,7 @@
   };
 
   const processAllCards = () => {
-    findCards().forEach(processCard);
+    findEntities().forEach(processEntity);
   };
 
   // ---------- main loop ----------
