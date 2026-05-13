@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Wanted × JobPlanet Score",
+  "version": "0.1.0",
+  "description": "원티드 회사/공고 페이지에서 잡플래닛 평점을 자동으로 표시합니다.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://www.wanted.co.kr/*",
+    "https://www.jobplanet.co.kr/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.wanted.co.kr/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

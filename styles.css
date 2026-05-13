@@ -1,0 +1,196 @@
+/* ============================================================
+   Wanted × JobPlanet Score — Badge Styles
+   ============================================================ */
+
+.wjp-badge {
+  --wjp-bg: #f1f3f5;
+  --wjp-fg: #495057;
+  --wjp-border: #dee2e6;
+  --wjp-accent: #868e96;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-decoration: none !important;
+  vertical-align: middle;
+  font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+
+  background: var(--wjp-bg);
+  color: var(--wjp-fg);
+  border: 1px solid var(--wjp-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+
+.wjp-badge:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  filter: brightness(1.02);
+}
+
+.wjp-badge .wjp-mark {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--wjp-accent);
+  color: #fff;
+  line-height: 1;
+}
+
+.wjp-badge .wjp-stars {
+  color: var(--wjp-accent);
+  letter-spacing: -1px;
+  font-size: 11px;
+}
+
+.wjp-badge .wjp-rating {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.wjp-badge .wjp-strength,
+.wjp-badge .wjp-reviews {
+  color: var(--wjp-fg);
+  opacity: 0.7;
+  font-weight: 500;
+  margin-left: 2px;
+  padding-left: 6px;
+  border-left: 1px solid currentColor;
+  border-left-color: var(--wjp-border);
+}
+
+/* ----------- tier color palettes ----------- */
+
+.wjp-badge.wjp-tier-excellent {
+  --wjp-bg: #e7f0ff;
+  --wjp-fg: #1c4ed8;
+  --wjp-border: #93b4f6;
+  --wjp-accent: #2563eb;
+}
+
+.wjp-badge.wjp-tier-good {
+  --wjp-bg: #e6f7ee;
+  --wjp-fg: #056033;
+  --wjp-border: #8fd6ae;
+  --wjp-accent: #10994d;
+}
+
+.wjp-badge.wjp-tier-ok {
+  --wjp-bg: #fff4d6;
+  --wjp-fg: #7a4d00;
+  --wjp-border: #f1c247;
+  --wjp-accent: #d99409;
+}
+
+.wjp-badge.wjp-tier-caution {
+  --wjp-bg: #ffeede;
+  --wjp-fg: #a3470a;
+  --wjp-border: #ffc285;
+  --wjp-accent: #ea7c1f;
+}
+
+.wjp-badge.wjp-tier-bad {
+  --wjp-bg: #ffe9e9;
+  --wjp-fg: #b71d1d;
+  --wjp-border: #ffadad;
+  --wjp-accent: #dc2626;
+}
+
+/* ----------- non-tier states ----------- */
+
+.wjp-badge.wjp-loading {
+  --wjp-bg: #f1f3f5;
+  --wjp-fg: #868e96;
+  --wjp-border: #e9ecef;
+  position: relative;
+}
+
+.wjp-badge.wjp-loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 100%
+  );
+  animation: wjp-shimmer 1.4s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes wjp-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.wjp-badge.wjp-empty {
+  --wjp-bg: #fafbfc;
+  --wjp-fg: #adb5bd;
+  --wjp-border: #e9ecef;
+  border-style: dashed;
+}
+
+.wjp-badge.wjp-error {
+  --wjp-bg: #fff5f5;
+  --wjp-fg: #c92a2a;
+  --wjp-border: #ffa8a8;
+}
+
+/* ----------- compact variant (list cards) ----------- */
+
+.wjp-badge.wjp-compact {
+  margin-left: 6px;
+  padding: 1px 7px;
+  font-size: 11px;
+  gap: 3px;
+  border-radius: 5px;
+  box-shadow: none;
+}
+
+.wjp-badge.wjp-compact:hover {
+  transform: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.wjp-badge.wjp-compact .wjp-mark {
+  font-size: 8px;
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+.wjp-badge.wjp-compact .wjp-rating {
+  font-size: 11px;
+}
+
+.wjp-badge.wjp-compact .wjp-strength {
+  display: none;
+}
+
+.wjp-badge.wjp-compact .wjp-reviews {
+  font-size: 10px;
+  margin-left: 1px;
+  padding-left: 4px;
+}
+
+.wjp-badge .wjp-reviews::before {
+  content: "리뷰 ";
+  opacity: 0.6;
+  font-weight: 500;
+}
+
+.wjp-badge.wjp-compact .wjp-reviews::before {
+  content: "";
+}
