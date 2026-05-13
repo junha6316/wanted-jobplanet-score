@@ -1,62 +1,130 @@
 # Wanted × JobPlanet Score
 
-원티드(wanted.co.kr) 채용공고 / 회사 페이지에 잡플래닛(jobplanet.co.kr) 평점·리뷰 수를 자동으로 표시하는 **비공식** 크롬 확장 프로그램.
+원티드(wanted.co.kr) 채용공고에 잡플래닛 평점을 자동으로 보여주는 크롬 확장 프로그램.
 
-> ⚠️ **Unofficial / Personal use.** 원티드, 잡플래닛과 어떠한 제휴 관계도 없습니다. 잡플래닛 내부 엔드포인트를 사용하므로 언제든 동작이 깨질 수 있고, 잡플래닛 ToS에 따라 사용이 제한될 수 있습니다. 본인 책임으로 사용하세요.
+![배지 미리보기](https://via.placeholder.com/600x80/fff4d6/7a4d00?text=JP+%E2%98%85%E2%98%85%E2%98%85%E2%98%86%E2%98%86+2.6+%EB%A6%AC%EB%B7%B0+34)
 
-## 기능
+채용공고 리스트, 회사 페이지, 홈 화면 어디서나 회사명 옆에 잡플래닛 별점과 리뷰 수가 떠요.
 
-- 채용 리스트(`/wdlist/*`), 검색, 공고 상세(`/wd/*`), 회사 페이지(`/company/*`) 모두 지원
-- 평점 구간별 색상 (🔵 4.0+ / 🟢 3.5+ / 🟡 3.0+ / 🟠 2.5+ / 🔴 <2.5)
-- 회사명 옆에 평점 + 리뷰 수 + 강점 키워드(워라밸/복지 등)
-- 회사명 매칭은 `(주)`, `주식회사`, `㈜` 등 정규화 후 비교
-- 24시간 결과 캐시 (`chrome.storage.local`)
-- 동시 요청 4개 제한 + MutationObserver로 무한 스크롤 대응
-- 클릭 시 잡플래닛 회사 페이지로 이동
+---
 
-## 설치
+## 🚀 설치 (개발 안 해보신 분도 OK, 1분 컷)
+
+### 1️⃣ 압축 파일 받기
+👉 [**최신 버전 다운로드**](https://github.com/junha6316/wanted-jobplanet-score/releases/latest) — 페이지 하단 **Assets**에서 `wanted-jobplanet-score.zip` 클릭
+
+### 2️⃣ 압축 풀기
+- **Mac**: 다운로드된 zip 더블클릭
+- **Windows**: zip 우클릭 → "압축 풀기"
+
+➜ `wanted-jobplanet-score` 폴더가 생김
+
+### 3️⃣ 크롬에 설치
+1. 크롬 주소창에 이거 붙여넣고 엔터:
+   ```
+   chrome://extensions
+   ```
+2. **우상단의 "개발자 모드"** 토글 켜기
+3. 좌상단 **"압축해제된 확장 프로그램을 로드합니다"** 클릭
+4. 방금 압축 푼 폴더 선택
+
+✅ 끝! 이제 https://www.wanted.co.kr 들어가면 자동으로 동작해요.
+
+---
+
+## 어떻게 보이나요?
+
+| 평점 구간 | 색상 | 의미 |
+|---|---|---|
+| 4.0 ~ 5.0 | 🔵 파랑 | 매우 좋음 |
+| 3.5 ~ 3.9 | 🟢 초록 | 좋음 |
+| 3.0 ~ 3.4 | 🟡 노랑 | 보통 |
+| 2.5 ~ 2.9 | 🟠 주황 | 주의 |
+| 0.0 ~ 2.4 | 🔴 빨강 | 비추 |
+
+배지 클릭하면 잡플래닛 회사 페이지로 바로 이동.
+호버하면 매칭된 회사명·강점 키워드까지 툴팁으로 나옴.
+
+---
+
+## ❓ 자주 묻는 질문
+
+**Q. 배지가 안 보여요**
+- 크롬 확장 페이지에서 우리 익스텐션이 **켜져 있는지** 확인
+- 원티드 페이지를 한 번 새로고침 (Cmd/Ctrl + R)
+- 그래도 안 보이면 [Issues](https://github.com/junha6316/wanted-jobplanet-score/issues)에 알려주세요
+
+**Q. 평점이 "정보 없음"이라고 떠요**
+- 잡플래닛에 해당 회사가 등록 안 되어있거나, 회사명 표기가 다른 경우 (예: 영문 vs 한글)
+- "정보 없음" 배지를 클릭하면 잡플래닛 검색 결과로 이동 — 거기서 수동 확인 가능
+
+**Q. 어떻게 잡플래닛에서 평점을 가져오나요?**
+- 잡플래닛 사이트에 사용자가 이미 로그인되어 있다면 그 세션을 그대로 사용
+- 별도 계정/API 키 필요 없음
+
+**Q. 내 정보가 어디로 전송되나요?**
+- 아무 데도 안 보냅니다. 모든 통신은 사용자 브라우저 ↔ 잡플래닛 사이만
+- 결과는 본인 컴퓨터에 30일간 캐시되고 자동 삭제
+
+**Q. 끄거나 지우고 싶어요**
+- `chrome://extensions`에서 토글로 끄기 또는 **제거** 버튼
+
+---
+
+## ⚠️ 알아두실 점
+
+- 이 프로그램은 **비공식**입니다. 원티드(주식회사 원티드랩), 잡플래닛(주식회사 브레인커머스)과 어떠한 제휴 관계도 없습니다.
+- 잡플래닛 사이트 구조가 바뀌면 동작하지 않을 수 있고, 그때는 [Issues](https://github.com/junha6316/wanted-jobplanet-score/issues)에 알려주시면 고치겠습니다 (보장은 못 함).
+- 모든 상표권은 각 권리자에게 있습니다.
+
+---
+
+## 🛠 개발자용
+
+소스 직접 빌드/수정하실 분만 보세요.
+
+### 기술 스택
+- Manifest V3
+- Vanilla JS (빌드 도구 없음)
+- `chrome.storage.local` 캐시 (30일)
+
+### 동작 원리
+1. **content script**가 페이지에서 회사명 추출
+   - 채용 카드 / 회사 카드: `[data-company-name]` 속성에서 직접
+   - 상세 페이지: `a[href^="/company/"]` 또는 회사 정보 헤더 텍스트
+2. **service worker (background)** 가 잡플래닛 두 엔드포인트 호출
+   - `/search/companies?query=...` (Next.js RSC) → 회사 ID + 평점 + 강점
+   - `/api/v4/companies/reviews/list?company_id=...` → 리뷰 수
+3. content script가 회사명 옆에 배지 inject
+4. 결과는 정규화된 회사명 키로 `chrome.storage.local`에 30일 캐시
+
+### 로컬 개발
 
 ```bash
 git clone https://github.com/junha6316/wanted-jobplanet-score.git
 ```
 
-1. Chrome에서 `chrome://extensions` 접속
-2. 우상단 **개발자 모드** 토글 ON
-3. **압축해제된 확장 프로그램을 로드합니다** 클릭 → 클론한 폴더 선택
-4. 원티드 페이지 방문하면 자동으로 배지 표시
+위의 설치 가이드 3단계와 동일하게 `chrome://extensions`에서 로드.
 
-## 동작 방식
+코드 수정 후 `chrome://extensions`의 새로고침(↻) 아이콘 클릭하면 반영.
 
-1. **content script**가 페이지에서 회사명 추출
-   - 리스트: 각 카드의 `button[data-company-name]` 속성
-   - 상세: `a[href^="/company/"]` 또는 회사 정보 헤더
-2. **background service worker**로 메시지 전달
-3. 잡플래닛 `/search/companies?query=...` (Next.js RSC) 호출 → 회사 ID + 평점 추출
-4. 잡플래닛 `/api/v4/companies/reviews/list?company_id=...` 호출 → 리뷰 수 추출
-5. content script가 회사명 옆에 배지 inject
+### 디버깅
 
-모든 요청은 사용자 브라우저의 잡플래닛 세션 쿠키를 사용합니다 (`credentials: include`).
-
-## 한계
-
-- 잡플래닛 내부 API/RSC 포맷이 바뀌면 깨짐
-- 회사명 매칭이 100% 정확하지 않음 (영문/한글 법인명 차이 등)
-- 회사당 fetch 2회 발생 (검색 + 리뷰 수)
-- 잡플래닛에서 의도적으로 차단할 경우 동작 불가
-
-## 디버깅
-
-`chrome://extensions` → 카드의 **서비스 워커** 클릭 → Console에서 `[WJP]` 로그 확인.
+`chrome://extensions` → 카드의 **"서비스 워커"** 클릭 → Console에서 `[WJP]` 로그 확인.
 
 캐시 비우기:
 ```js
 chrome.storage.local.clear()
 ```
 
+### 패키지 빌드
+
+```bash
+zip -r wanted-jobplanet-score.zip . -x "*.git*" "*.DS_Store" "README.md" "LICENSE" "*.zip"
+```
+
+---
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
-## Disclaimer
-
-이 프로젝트는 원티드(주식회사 원티드랩) 및 잡플래닛(주식회사 브레인커머스)과 무관한 개인 프로젝트입니다. 모든 상표권은 각 권리자에게 있습니다. 이 소프트웨어는 학습 및 개인 사용 목적으로 제공되며, 작성자는 사용으로 인한 어떠한 책임도 지지 않습니다.
+MIT — [LICENSE](LICENSE) 참조.
