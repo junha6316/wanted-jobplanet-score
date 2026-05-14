@@ -2,7 +2,10 @@ const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 const normalize = (name) =>
   name
-    .replace(/\(주\)|주식회사|㈜|\(유\)|\(재\)/g, "")
+    .replace(/\(주\)|주식회사|㈜|\(유\)|\(재\)|\(사\)|유한회사|재단법인|사단법인/g, "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\b(inc|incorporated|ltd|limited|co|corp|corporation|llc)\b\.?/gi, "")
+    .replace(/[,\.\-_/]/g, "")
     .replace(/\s+/g, "")
     .trim()
     .toLowerCase();
@@ -37,13 +40,25 @@ const parseCompanies = (rscText) => {
 const pickBest = (companies, query) => {
   if (companies.length === 0) return null;
   const qn = normalize(query);
+  if (qn.length < 2) return null;
+
   const exact = companies.find((c) => normalize(c.name) === qn);
   if (exact) return exact;
-  const containsQuery = companies.find((c) => normalize(c.name).includes(qn));
-  if (containsQuery) return containsQuery;
-  const queryContains = companies.find((c) => qn.includes(normalize(c.name)) && normalize(c.name).length >= 2);
-  if (queryContains) return queryContains;
-  return companies[0];
+
+  for (const c of companies) {
+    const cn = normalize(c.name);
+    if (cn.length === 0) continue;
+    const [longer, shorter] = cn.length >= qn.length ? [cn, qn] : [qn, cn];
+    if (
+      longer.includes(shorter) &&
+      shorter.length >= 4 &&
+      longer.length - shorter.length <= 2
+    ) {
+      return c;
+    }
+  }
+
+  return null;
 };
 
 const fetchReviewCount = async (companyId) => {
@@ -98,6 +113,12 @@ const fetchScore = async (rawName) => {
   }
 
   const best = pickBest(companies, rawName);
+  if (!best) {
+    console.log("[WJP] no confident match for", rawName, "candidates:", companies.map(c => c.name));
+    const result = { state: "not_found" };
+    await setCached(cacheKey, result);
+    return result;
+  }
   const reviewCount = await fetchReviewCount(best.id);
 
   const result = {

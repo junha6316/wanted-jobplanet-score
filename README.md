@@ -2,9 +2,15 @@
 
 원티드(wanted.co.kr) 채용공고에 잡플래닛 평점을 자동으로 보여주는 크롬 확장 프로그램.
 
-![배지 미리보기](https://via.placeholder.com/600x80/fff4d6/7a4d00?text=JP+%E2%98%85%E2%98%85%E2%98%85%E2%98%86%E2%98%86+2.6+%EB%A6%AC%EB%B7%B0+34)
+![Hero](store/promo-1400x560.png)
 
 채용공고 리스트, 회사 페이지, 홈 화면 어디서나 회사명 옆에 잡플래닛 별점과 리뷰 수가 떠요.
+
+### 미리보기
+
+| 채용공고 리스트 | 공고 상세 |
+|---|---|
+| ![리스트](images/screenshot-list.png) | ![상세](images/screenshot-detail.png) |
 
 ---
 

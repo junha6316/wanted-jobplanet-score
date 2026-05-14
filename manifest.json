@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Wanted × JobPlanet Score",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "원티드 회사/공고 페이지에서 잡플래닛 평점을 자동으로 표시합니다.",
   "permissions": ["storage"],
   "host_permissions": [
@@ -18,5 +18,10 @@
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   }
 }
