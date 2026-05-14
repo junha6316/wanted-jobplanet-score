@@ -1,6 +1,6 @@
 # Wanted × JobPlanet Score
 
-원티드(wanted.co.kr) 채용공고에 잡플래닛 평점을 자동으로 보여주는 크롬 확장 프로그램.
+원티드(wanted.co.kr) 채용공고에 **잡플래닛 평점**과 **사람인 평균연봉·영업이익**을 자동으로 보여주는 크롬 확장 프로그램.
 
 ![Hero](store/promo-1400x560.png)
 

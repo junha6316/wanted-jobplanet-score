@@ -107,6 +107,30 @@
   --wjp-accent: #dc2626;
 }
 
+/* ----------- Saramin badge (salary, neutral teal-blue) ----------- */
+
+.wjp-badge.wjp-sr {
+  --wjp-bg: #ecfeff;
+  --wjp-fg: #155e75;
+  --wjp-border: #a5f3fc;
+  --wjp-accent: #0891b2;
+}
+
+.wjp-badge.wjp-sr .wjp-unit {
+  font-size: 9px;
+  font-weight: 600;
+  opacity: 0.7;
+  margin-left: -2px;
+}
+
+.wjp-badge.wjp-sr .wjp-strength {
+  font-size: 10px;
+}
+
+.wjp-badge.wjp-compact.wjp-sr .wjp-unit {
+  font-size: 8px;
+}
+
 /* ----------- non-tier states ----------- */
 
 .wjp-badge.wjp-loading {

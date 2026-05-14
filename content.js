@@ -1,7 +1,7 @@
 (() => {
   const PROCESSED_ATTR = "data-wjp-processed";
   const BADGE_CLASS = "wjp-badge";
-  const DETAIL_BADGE_ID = "wjp-score-badge";
+  const DETAIL_BADGE_PREFIX = "wjp-detail-";
 
   // ---------- concurrency-limited queue ----------
   const MAX_CONCURRENT = 4;
@@ -25,21 +25,15 @@
     }
   };
 
-  const requestScore = (company) =>
+  const requestSource = (company, type) =>
     new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        { type: "FETCH_JOBPLANET_SCORE", company },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            resolve({
-              ok: false,
-              message: chrome.runtime.lastError.message,
-            });
-            return;
-          }
-          resolve(response || { ok: false, message: "no response" });
+      chrome.runtime.sendMessage({ type, company }, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve({ ok: false, message: chrome.runtime.lastError.message });
+          return;
         }
-      );
+        resolve(response || { ok: false });
+      });
     });
 
   // ---------- formatters ----------
@@ -48,6 +42,13 @@
     if (n >= 10000) return `${(n / 10000).toFixed(1).replace(/\.0$/, "")}만`;
     if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}천`;
     return String(n);
+  };
+
+  const formatSalary = (salaryStr) => {
+    if (!salaryStr) return null;
+    // "8,700만원" → "8,700"
+    const m = salaryStr.match(/([\d,]+)/);
+    return m ? m[1] : salaryStr;
   };
 
   // ---------- tier classification ----------
@@ -59,12 +60,13 @@
     return "wjp-tier-bad";
   };
 
-  // ---------- badge builders ----------
-  const makeBadge = (payload, query, opts = {}) => {
+  // ---------- JobPlanet badge ----------
+  const makeJpBadge = (payload, query, opts = {}) => {
     const badge = document.createElement("a");
     badge.target = "_blank";
     badge.rel = "noopener noreferrer";
-    badge.className = BADGE_CLASS;
+    badge.className = `${BADGE_CLASS} wjp-jp`;
+    badge.dataset.wjpSource = "jp";
     if (opts.compact) badge.classList.add("wjp-compact");
 
     if (payload.state === "loading") {
@@ -87,27 +89,55 @@
       badge.classList.add("wjp-ok", tierClass(payload.rating));
       badge.innerHTML =
         `<span class="wjp-mark" aria-hidden="true">JP</span>` +
-        (opts.compact
-          ? ""
-          : `<span class="wjp-stars">${stars}</span>`) +
+        (opts.compact ? "" : `<span class="wjp-stars">${stars}</span>`) +
         `<span class="wjp-rating">${payload.rating.toFixed(1)}</span>` +
-        (reviewStr
-          ? `<span class="wjp-reviews">${reviewStr}</span>`
-          : "") +
+        (reviewStr ? `<span class="wjp-reviews">${reviewStr}</span>` : "") +
         (payload.strength && !opts.compact
           ? `<span class="wjp-strength">${payload.strength}</span>`
           : "");
       badge.href = payload.url;
       const titleParts = [`잡플래닛 평점 ${payload.rating.toFixed(1)} / 5`];
-      if (payload.reviewCount != null) {
-        titleParts.push(`리뷰 ${payload.reviewCount.toLocaleString()}건`);
-      }
-      if (payload.matchedName && payload.matchedName !== query) {
-        titleParts.push(`매칭: ${payload.matchedName}`);
-      }
+      if (payload.reviewCount != null) titleParts.push(`리뷰 ${payload.reviewCount.toLocaleString()}건`);
+      if (payload.matchedName && payload.matchedName !== query) titleParts.push(`매칭: ${payload.matchedName}`);
       if (payload.strength) titleParts.push(`강점: ${payload.strength}`);
       badge.title = titleParts.join(" · ");
     }
+    return badge;
+  };
+
+  // ---------- Saramin badge ----------
+  const makeSrBadge = (payload, query, opts = {}) => {
+    const badge = document.createElement("a");
+    badge.target = "_blank";
+    badge.rel = "noopener noreferrer";
+    badge.className = `${BADGE_CLASS} wjp-sr`;
+    badge.dataset.wjpSource = "sr";
+    if (opts.compact) badge.classList.add("wjp-compact");
+
+    if (payload.state !== "ok") return null; // hide when no data
+
+    const salaryStr = formatSalary(payload.salary);
+    const profit = payload.profit;
+
+    if (!salaryStr && !profit) return null;
+
+    badge.classList.add("wjp-ok");
+    badge.innerHTML =
+      `<span class="wjp-mark" aria-hidden="true">SR</span>` +
+      (salaryStr
+        ? `<span class="wjp-rating">${salaryStr}</span><span class="wjp-unit">만</span>`
+        : "") +
+      (profit && !opts.compact
+        ? `<span class="wjp-strength">영업 ${profit}</span>`
+        : "");
+    badge.href = payload.url;
+
+    const titleParts = [];
+    if (payload.salary) titleParts.push(`사람인 평균연봉 ${payload.salary}`);
+    if (profit) titleParts.push(`영업이익 ${profit}`);
+    if (payload.matchedName && payload.matchedName !== query) titleParts.push(`매칭: ${payload.matchedName}`);
+    badge.title = titleParts.join(" · ");
+
     return badge;
   };
 
@@ -130,11 +160,21 @@
     return null;
   };
 
-  const renderDetailBadge = (anchor, payload) => {
-    document.getElementById(DETAIL_BADGE_ID)?.remove();
-    const badge = makeBadge(payload, anchor.name);
-    badge.id = DETAIL_BADGE_ID;
+  const renderDetailJp = (anchor, payload) => {
+    document.querySelector(`#${DETAIL_BADGE_PREFIX}jp`)?.remove();
+    const badge = makeJpBadge(payload, anchor.name);
+    badge.id = `${DETAIL_BADGE_PREFIX}jp`;
     anchor.el.insertAdjacentElement("afterend", badge);
+    return badge;
+  };
+
+  const renderDetailSr = (anchor, payload) => {
+    document.querySelector(`#${DETAIL_BADGE_PREFIX}sr`)?.remove();
+    const badge = makeSrBadge(payload, anchor.name);
+    if (!badge) return;
+    badge.id = `${DETAIL_BADGE_PREFIX}sr`;
+    const jpEl = document.querySelector(`#${DETAIL_BADGE_PREFIX}jp`);
+    (jpEl || anchor.el).insertAdjacentElement("afterend", badge);
   };
 
   const processDetail = () => {
@@ -142,29 +182,27 @@
     if (!anchor) return;
     if (
       anchor.name === currentDetailCompany &&
-      document.getElementById(DETAIL_BADGE_ID)
+      document.querySelector(`#${DETAIL_BADGE_PREFIX}jp`)
     ) {
       return;
     }
     currentDetailCompany = anchor.name;
-    renderDetailBadge(anchor, { state: "loading" });
-    enqueue(() => requestScore(anchor.name)).then((res) => {
-      if (!res?.ok) {
-        renderDetailBadge(anchor, {
-          state: "error",
-          message: res?.message || "응답 없음",
-        });
-        return;
-      }
-      renderDetailBadge(anchor, res);
+    renderDetailJp(anchor, { state: "loading" });
+
+    enqueue(() => requestSource(anchor.name, "FETCH_JOBPLANET_SCORE")).then((res) => {
+      if (anchor.name !== currentDetailCompany) return;
+      renderDetailJp(anchor, res?.ok ? res : { state: "error", message: res?.message });
+    });
+
+    enqueue(() => requestSource(anchor.name, "FETCH_SARAMIN_INFO")).then((res) => {
+      if (anchor.name !== currentDetailCompany) return;
+      if (res?.ok) renderDetailSr(anchor, res);
     });
   };
 
-  // ---------- list page / home (many cards with [data-company-name]) ----------
+  // ---------- list / home (cards with [data-company-name]) ----------
   const findEntities = () =>
-    document.querySelectorAll(
-      `[data-company-name]:not([${PROCESSED_ATTR}])`
-    );
+    document.querySelectorAll(`[data-company-name]:not([${PROCESSED_ATTR}])`);
 
   const findCompanyTextInCard = (card, companyName) => {
     const semantic = card.querySelector(
@@ -200,16 +238,24 @@
     const target = findCompanyTextInCard(card, companyName);
     if (!target) return;
 
-    const placeholder = makeBadge({ state: "loading" }, companyName, { compact: true });
-    target.insertAdjacentElement("afterend", placeholder);
+    // JobPlanet placeholder (always visible during loading)
+    const jpPlaceholder = makeJpBadge({ state: "loading" }, companyName, { compact: true });
+    target.insertAdjacentElement("afterend", jpPlaceholder);
 
-    enqueue(() => requestScore(companyName)).then((res) => {
+    enqueue(() => requestSource(companyName, "FETCH_JOBPLANET_SCORE")).then((res) => {
       const badge = res?.ok
-        ? makeBadge(res, companyName, { compact: true })
-        : makeBadge({ state: "error", message: res?.message }, companyName, {
-            compact: true,
-          });
-      placeholder.replaceWith(badge);
+        ? makeJpBadge(res, companyName, { compact: true })
+        : makeJpBadge({ state: "error", message: res?.message }, companyName, { compact: true });
+      jpPlaceholder.replaceWith(badge);
+    });
+
+    enqueue(() => requestSource(companyName, "FETCH_SARAMIN_INFO")).then((res) => {
+      if (!res?.ok || res.state !== "ok") return;
+      const srBadge = makeSrBadge(res, companyName, { compact: true });
+      if (!srBadge) return;
+      const jpBadge =
+        card.querySelector(`.${BADGE_CLASS}[data-wjp-source="jp"]`) || target;
+      jpBadge.insertAdjacentElement("afterend", srBadge);
     });
   };
 
@@ -231,7 +277,9 @@
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       currentDetailCompany = null;
-      document.getElementById(DETAIL_BADGE_ID)?.remove();
+      document
+        .querySelectorAll(`[id^="${DETAIL_BADGE_PREFIX}"]`)
+        .forEach((el) => el.remove());
       document
         .querySelectorAll(`[${PROCESSED_ATTR}]`)
         .forEach((el) => el.removeAttribute(PROCESSED_ATTR));

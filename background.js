@@ -22,21 +22,6 @@ const setCached = async (key, value) => {
   await chrome.storage.local.set({ [key]: { ts: Date.now(), value } });
 };
 
-const parseCompanies = (rscText) => {
-  const re = /\{"company_id":(\d+),"name":"([^"]+)"[^}]*?"rate_total_avg":([\d.]+)(?:[^}]*?"strength_keyword":"([^"]*)")?/g;
-  const out = [];
-  let m;
-  while ((m = re.exec(rscText)) !== null) {
-    out.push({
-      id: m[1],
-      name: m[2],
-      rating: parseFloat(m[3]),
-      strength: m[4] || null,
-    });
-  }
-  return out;
-};
-
 const pickBest = (companies, query) => {
   if (companies.length === 0) return null;
   const qn = normalize(query);
@@ -61,14 +46,28 @@ const pickBest = (companies, query) => {
   return null;
 };
 
-const fetchReviewCount = async (companyId) => {
+// =================== JobPlanet ===================
+
+const parseJobPlanetCompanies = (rscText) => {
+  const re = /\{"company_id":(\d+),"name":"([^"]+)"[^}]*?"rate_total_avg":([\d.]+)(?:[^}]*?"strength_keyword":"([^"]*)")?/g;
+  const out = [];
+  let m;
+  while ((m = re.exec(rscText)) !== null) {
+    out.push({
+      id: m[1],
+      name: m[2],
+      rating: parseFloat(m[3]),
+      strength: m[4] || null,
+    });
+  }
+  return out;
+};
+
+const fetchJobPlanetReviewCount = async (companyId) => {
   try {
     const res = await fetch(
       `https://www.jobplanet.co.kr/api/v4/companies/reviews/list?device=desktop&company_id=${companyId}&page=1`,
-      {
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      }
+      { credentials: "include", headers: { Accept: "application/json" } }
     );
     if (!res.ok) return null;
     const json = await res.json();
@@ -79,48 +78,29 @@ const fetchReviewCount = async (companyId) => {
   }
 };
 
-const fetchScore = async (rawName) => {
-  const cacheKey = `score:${normalize(rawName)}`;
+const fetchJobPlanet = async (rawName) => {
+  const cacheKey = `jp:${normalize(rawName)}`;
   const cached = await getCached(cacheKey);
-  if (cached) {
-    console.log("[WJP] cache hit", rawName);
-    return cached;
-  }
+  if (cached) return cached;
 
   const url = `https://www.jobplanet.co.kr/search/companies?query=${encodeURIComponent(rawName)}`;
-  console.log("[WJP] fetching", url);
-
   const res = await fetch(url, {
     credentials: "include",
-    headers: {
-      RSC: "1",
-      Accept: "*/*",
-      "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
-    },
+    headers: { RSC: "1", Accept: "*/*", "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8" },
   });
-
-  console.log("[WJP] response", res.status);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
   const text = await res.text();
-  const companies = parseCompanies(text);
-  console.log("[WJP] parsed companies", companies.length, companies.slice(0, 3));
-
-  if (companies.length === 0) {
-    const result = { state: "not_found" };
-    await setCached(cacheKey, result);
-    return result;
-  }
-
+  const companies = parseJobPlanetCompanies(text);
   const best = pickBest(companies, rawName);
+
   if (!best) {
-    console.log("[WJP] no confident match for", rawName, "candidates:", companies.map(c => c.name));
     const result = { state: "not_found" };
     await setCached(cacheKey, result);
     return result;
   }
-  const reviewCount = await fetchReviewCount(best.id);
 
+  const reviewCount = await fetchJobPlanetReviewCount(best.id);
   const result = {
     state: "ok",
     rating: best.rating,
@@ -133,15 +113,98 @@ const fetchScore = async (rawName) => {
   return result;
 };
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg?.type !== "FETCH_JOBPLANET_SCORE") return;
+// =================== Saramin ===================
 
-  fetchScore(msg.company)
-    .then((result) => sendResponse({ ok: true, ...result }))
-    .catch((err) => {
-      console.error("[WJP] fetch failed", err);
-      sendResponse({ ok: false, message: err.message || String(err) });
+const parseSaraminCompanies = (html) => {
+  const nameRe = /<a[^>]+href="\/zf_user\/company-info\/view\?csn=([^"&]+)"[^>]*class="[^"]*company_nm[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
+  const positions = [];
+  let m;
+  while ((m = nameRe.exec(html)) !== null) {
+    positions.push({
+      csn: m[1],
+      name: m[2].replace(/<[^>]+>/g, "").trim(),
+      pos: m.index,
     });
+  }
 
-  return true;
+  const seen = new Set();
+  const unique = positions.filter((p) => {
+    if (seen.has(p.csn)) return false;
+    seen.add(p.csn);
+    return true;
+  });
+
+  return unique.map((p, i) => {
+    const nextPos = unique[i + 1]?.pos ?? p.pos + 4000;
+    const block = html.slice(p.pos, nextPos);
+    const salaryMatch = block.match(
+      /평균연봉<\/dt>\s*<dd[^>]*>\s*([\d,]+\s*만원|[\d,]+\s*억)/
+    );
+    const profitMatch = block.match(
+      /영업이익<\/dt>\s*<dd[^>]*>\s*(-?\s*[\d,.]+\s*(?:억|만원|천만원))/
+    );
+    return {
+      id: p.csn,
+      name: p.name,
+      salary: salaryMatch?.[1]?.replace(/\s+/g, "") || null,
+      profit: profitMatch?.[1]?.replace(/\s+/g, "") || null,
+    };
+  });
+};
+
+const fetchSaramin = async (rawName) => {
+  const cacheKey = `sr:${normalize(rawName)}`;
+  const cached = await getCached(cacheKey);
+  if (cached) return cached;
+
+  const url = `https://www.saramin.co.kr/zf_user/search/company?searchword=${encodeURIComponent(rawName)}`;
+  const res = await fetch(url, {
+    credentials: "include",
+    headers: { Accept: "text/html", "Accept-Language": "ko-KR,ko;q=0.9" },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const html = await res.text();
+  const companies = parseSaraminCompanies(html);
+  console.log("[WJP] saramin parsed", companies.length, companies.slice(0, 3));
+
+  const best = pickBest(companies, rawName);
+  if (!best || (!best.salary && !best.profit)) {
+    const result = { state: "not_found" };
+    await setCached(cacheKey, result);
+    return result;
+  }
+
+  const result = {
+    state: "ok",
+    salary: best.salary,
+    profit: best.profit,
+    matchedName: best.name,
+    url: `https://www.saramin.co.kr/zf_user/company-info/view?csn=${encodeURIComponent(best.id)}`,
+  };
+  await setCached(cacheKey, result);
+  return result;
+};
+
+// =================== message handler ===================
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === "FETCH_JOBPLANET_SCORE") {
+    fetchJobPlanet(msg.company)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((err) => {
+        console.error("[WJP] jobplanet fetch failed", err);
+        sendResponse({ ok: false, message: err.message || String(err) });
+      });
+    return true;
+  }
+  if (msg?.type === "FETCH_SARAMIN_INFO") {
+    fetchSaramin(msg.company)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((err) => {
+        console.error("[WJP] saramin fetch failed", err);
+        sendResponse({ ok: false, message: err.message || String(err) });
+      });
+    return true;
+  }
 });
