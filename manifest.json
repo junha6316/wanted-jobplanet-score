@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Wanted × JobPlanet Score",
-  "version": "0.4.0",
-  "description": "원티드 채용공고에 잡플래닛 평점·리뷰 수와 사람인 평균연봉·영업이익을 자동으로 표시합니다.",
+  "version": "0.5.0",
+  "description": "원티드 채용공고에 잡플래닛·블라인드 평점과 사람인 평균연봉·영업이익을 자동으로 표시합니다.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://www.wanted.co.kr/*",
     "https://www.jobplanet.co.kr/*",
-    "https://www.saramin.co.kr/*"
+    "https://www.saramin.co.kr/*",
+    "https://www.teamblind.com/*"
   ],
   "content_scripts": [
     {

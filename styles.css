@@ -107,6 +107,13 @@
   --wjp-accent: #dc2626;
 }
 
+/* ----------- Blind badge ----------- */
+/* Tier-colored like JobPlanet, but with a distinctive mark color so JP/BL are easy to tell apart at a glance. */
+
+.wjp-badge.wjp-bl .wjp-mark {
+  background: #4338ca;
+}
+
 /* ----------- Saramin badge (salary, neutral teal-blue) ----------- */
 
 .wjp-badge.wjp-sr {
@@ -173,14 +180,14 @@
   --wjp-border: #ffa8a8;
 }
 
-/* ----------- compact variant (list cards) ----------- */
+/* ----------- compact variant (list cards) — pill-shaped chip ----------- */
 
 .wjp-badge.wjp-compact {
   margin-left: 6px;
-  padding: 1px 7px;
+  padding: 1px 8px;
   font-size: 11px;
-  gap: 3px;
-  border-radius: 5px;
+  gap: 4px;
+  border-radius: 999px;
   box-shadow: none;
 }
 
@@ -191,8 +198,8 @@
 
 .wjp-badge.wjp-compact .wjp-mark {
   font-size: 8px;
-  padding: 1px 3px;
-  border-radius: 2px;
+  padding: 1px 4px;
+  border-radius: 999px;
 }
 
 .wjp-badge.wjp-compact .wjp-rating {
@@ -205,8 +212,10 @@
 
 .wjp-badge.wjp-compact .wjp-reviews {
   font-size: 10px;
-  margin-left: 1px;
-  padding-left: 4px;
+  opacity: 0.55;
+  margin-left: 0;
+  padding-left: 3px;
+  border-left: 0;
 }
 
 .wjp-badge .wjp-reviews::before {

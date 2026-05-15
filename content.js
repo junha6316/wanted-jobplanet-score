@@ -3,38 +3,50 @@
   const BADGE_CLASS = "wjp-badge";
   const DETAIL_BADGE_PREFIX = "wjp-detail-";
 
-  // ---------- concurrency-limited queue ----------
-  const MAX_CONCURRENT = 4;
-  let inflight = 0;
-  const queue = [];
-  const enqueue = (task) =>
-    new Promise((resolve) => {
-      queue.push({ task, resolve });
-      drain();
-    });
-  const drain = () => {
-    while (inflight < MAX_CONCURRENT && queue.length > 0) {
-      const { task, resolve } = queue.shift();
-      inflight++;
-      task()
-        .then(resolve)
-        .finally(() => {
-          inflight--;
-          drain();
-        });
-    }
+  // ---------- per-source concurrency-limited queues ----------
+  // Blind 페이지(~800KB)가 무거워 단일 큐로 묶으면 JP·SR이 막힘.
+  // Source별로 슬롯을 분리해 별점(JP)이 BL 대기에 갇히지 않게 함.
+  const makeQueue = (maxConcurrent) => {
+    let inflight = 0;
+    const queue = [];
+    const drain = () => {
+      while (inflight < maxConcurrent && queue.length > 0) {
+        const { task, resolve } = queue.shift();
+        inflight++;
+        task()
+          .then(resolve)
+          .finally(() => {
+            inflight--;
+            drain();
+          });
+      }
+    };
+    return (task) =>
+      new Promise((resolve) => {
+        queue.push({ task, resolve });
+        drain();
+      });
   };
 
-  const requestSource = (company, type) =>
-    new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type, company }, (response) => {
-        if (chrome.runtime.lastError) {
-          resolve({ ok: false, message: chrome.runtime.lastError.message });
-          return;
-        }
-        resolve(response || { ok: false });
-      });
-    });
+  const queues = {
+    FETCH_JOBPLANET_SCORE: makeQueue(4),
+    FETCH_BLIND_SCORE: makeQueue(4),
+    FETCH_SARAMIN_INFO: makeQueue(4),
+  };
+
+  const fetchSource = (company, type) =>
+    queues[type](
+      () =>
+        new Promise((resolve) => {
+          chrome.runtime.sendMessage({ type, company }, (response) => {
+            if (chrome.runtime.lastError) {
+              resolve({ ok: false, message: chrome.runtime.lastError.message });
+              return;
+            }
+            resolve(response || { ok: false });
+          });
+        })
+    );
 
   // ---------- formatters ----------
   const formatReviewCount = (n) => {
@@ -102,6 +114,35 @@
       if (payload.strength) titleParts.push(`강점: ${payload.strength}`);
       badge.title = titleParts.join(" · ");
     }
+    return badge;
+  };
+
+  // ---------- Blind badge ----------
+  const makeBlBadge = (payload, query, opts = {}) => {
+    if (payload.state !== "ok") return null; // hide when missing/error
+
+    const badge = document.createElement("a");
+    badge.target = "_blank";
+    badge.rel = "noopener noreferrer";
+    badge.className = `${BADGE_CLASS} wjp-bl`;
+    badge.dataset.wjpSource = "bl";
+    if (opts.compact) badge.classList.add("wjp-compact");
+
+    const rounded = Math.round(payload.rating);
+    const stars = "★".repeat(rounded) + "☆".repeat(5 - rounded);
+    const reviewStr = formatReviewCount(payload.reviewCount);
+    badge.classList.add("wjp-ok", tierClass(payload.rating));
+    badge.innerHTML =
+      `<span class="wjp-mark" aria-hidden="true">BL</span>` +
+      (opts.compact ? "" : `<span class="wjp-stars">${stars}</span>`) +
+      `<span class="wjp-rating">${payload.rating.toFixed(1)}</span>` +
+      (reviewStr ? `<span class="wjp-reviews">${reviewStr}</span>` : "");
+    badge.href = payload.url;
+
+    const titleParts = [`블라인드 평점 ${payload.rating.toFixed(1)} / 5`];
+    if (payload.reviewCount != null) titleParts.push(`리뷰 ${payload.reviewCount.toLocaleString()}건`);
+    if (payload.matchedName && payload.matchedName !== query) titleParts.push(`매칭: ${payload.matchedName}`);
+    badge.title = titleParts.join(" · ");
     return badge;
   };
 
@@ -173,6 +214,16 @@
     const badge = makeSrBadge(payload, anchor.name);
     if (!badge) return;
     badge.id = `${DETAIL_BADGE_PREFIX}sr`;
+    const blEl = document.querySelector(`#${DETAIL_BADGE_PREFIX}bl`);
+    const jpEl = document.querySelector(`#${DETAIL_BADGE_PREFIX}jp`);
+    (blEl || jpEl || anchor.el).insertAdjacentElement("afterend", badge);
+  };
+
+  const renderDetailBl = (anchor, payload) => {
+    document.querySelector(`#${DETAIL_BADGE_PREFIX}bl`)?.remove();
+    const badge = makeBlBadge(payload, anchor.name);
+    if (!badge) return;
+    badge.id = `${DETAIL_BADGE_PREFIX}bl`;
     const jpEl = document.querySelector(`#${DETAIL_BADGE_PREFIX}jp`);
     (jpEl || anchor.el).insertAdjacentElement("afterend", badge);
   };
@@ -189,12 +240,17 @@
     currentDetailCompany = anchor.name;
     renderDetailJp(anchor, { state: "loading" });
 
-    enqueue(() => requestSource(anchor.name, "FETCH_JOBPLANET_SCORE")).then((res) => {
+    fetchSource(anchor.name, "FETCH_JOBPLANET_SCORE").then((res) => {
       if (anchor.name !== currentDetailCompany) return;
       renderDetailJp(anchor, res?.ok ? res : { state: "error", message: res?.message });
     });
 
-    enqueue(() => requestSource(anchor.name, "FETCH_SARAMIN_INFO")).then((res) => {
+    fetchSource(anchor.name, "FETCH_BLIND_SCORE").then((res) => {
+      if (anchor.name !== currentDetailCompany) return;
+      if (res?.ok) renderDetailBl(anchor, res);
+    });
+
+    fetchSource(anchor.name, "FETCH_SARAMIN_INFO").then((res) => {
       if (anchor.name !== currentDetailCompany) return;
       if (res?.ok) renderDetailSr(anchor, res);
     });
@@ -242,20 +298,34 @@
     const jpPlaceholder = makeJpBadge({ state: "loading" }, companyName, { compact: true });
     target.insertAdjacentElement("afterend", jpPlaceholder);
 
-    enqueue(() => requestSource(companyName, "FETCH_JOBPLANET_SCORE")).then((res) => {
+    fetchSource(companyName, "FETCH_JOBPLANET_SCORE").then((res) => {
       const badge = res?.ok
         ? makeJpBadge(res, companyName, { compact: true })
         : makeJpBadge({ state: "error", message: res?.message }, companyName, { compact: true });
       jpPlaceholder.replaceWith(badge);
     });
 
-    enqueue(() => requestSource(companyName, "FETCH_SARAMIN_INFO")).then((res) => {
+    fetchSource(companyName, "FETCH_BLIND_SCORE").then((res) => {
       if (!res?.ok || res.state !== "ok") return;
-      const srBadge = makeSrBadge(res, companyName, { compact: true });
-      if (!srBadge) return;
+      // Wanted가 카드를 재렌더링하는 동안 같은 카드에 두 번째 BL이 박히는 일이 있어 source-level 중복 가드.
+      if (card.querySelector(`.${BADGE_CLASS}[data-wjp-source="bl"]`)) return;
+      const blBadge = makeBlBadge(res, companyName, { compact: true });
+      if (!blBadge) return;
       const jpBadge =
         card.querySelector(`.${BADGE_CLASS}[data-wjp-source="jp"]`) || target;
-      jpBadge.insertAdjacentElement("afterend", srBadge);
+      jpBadge.insertAdjacentElement("afterend", blBadge);
+    });
+
+    fetchSource(companyName, "FETCH_SARAMIN_INFO").then((res) => {
+      if (!res?.ok || res.state !== "ok") return;
+      if (card.querySelector(`.${BADGE_CLASS}[data-wjp-source="sr"]`)) return;
+      const srBadge = makeSrBadge(res, companyName, { compact: true });
+      if (!srBadge) return;
+      const anchor =
+        card.querySelector(`.${BADGE_CLASS}[data-wjp-source="bl"]`) ||
+        card.querySelector(`.${BADGE_CLASS}[data-wjp-source="jp"]`) ||
+        target;
+      anchor.insertAdjacentElement("afterend", srBadge);
     });
   };
 
