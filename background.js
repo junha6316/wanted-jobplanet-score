@@ -286,6 +286,91 @@ const fetchBlind = async (rawName) => {
   return result;
 };
 
+// =================== Update check (GitHub Releases) ===================
+
+const UPDATE_REPO = "junha6316/wanted-jobplanet-score";
+const UPDATE_ALARM_NAME = "wjp-update-check";
+const UPDATE_CHECK_PERIOD_MIN = 24 * 60; // 1 day
+const UPDATE_NOTIF_ID_PREFIX = "wjp-update-";
+
+const parseSemver = (v) => String(v).replace(/^v/, "").split(".").map((n) => parseInt(n, 10) || 0);
+const isStrictlyNewer = (latest, current) => {
+  const a = parseSemver(latest);
+  const b = parseSemver(current);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+};
+
+const checkForUpdate = async () => {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
+      headers: { Accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) return;
+    const json = await res.json();
+    const latestTag = json?.tag_name;
+    const releaseUrl = json?.html_url;
+    if (!latestTag) return;
+
+    const current = chrome.runtime.getManifest().version;
+    if (!isStrictlyNewer(latestTag, current)) {
+      chrome.action.setBadgeText({ text: "" });
+      chrome.action.setTitle({ title: "Wanted × JobPlanet Score" });
+      return;
+    }
+
+    chrome.action.setBadgeText({ text: "NEW" });
+    chrome.action.setBadgeBackgroundColor({ color: "#dc2626" });
+    chrome.action.setTitle({
+      title: `새 버전 ${latestTag} 사용 가능 (현재 ${current}) — 클릭하여 받기`,
+    });
+    await chrome.storage.local.set({ latestReleaseUrl: releaseUrl, latestVersion: latestTag });
+
+    // 한 번 본 버전은 토스트로 다시 알리지 않음 (배지는 계속 유지)
+    const { notifiedVersion } = await chrome.storage.local.get("notifiedVersion");
+    if (notifiedVersion !== latestTag) {
+      chrome.notifications.create(UPDATE_NOTIF_ID_PREFIX + latestTag, {
+        type: "basic",
+        iconUrl: "icons/icon128.png",
+        title: `새 버전 ${latestTag}`,
+        message: "Wanted × JobPlanet Score 업데이트가 있습니다. 확장 아이콘을 클릭하면 받는 페이지로 이동합니다.",
+        priority: 1,
+      });
+      await chrome.storage.local.set({ notifiedVersion: latestTag });
+    }
+  } catch (err) {
+    console.warn("[WJP] update check failed", err);
+  }
+};
+
+const openReleasePage = async () => {
+  const { latestReleaseUrl } = await chrome.storage.local.get("latestReleaseUrl");
+  const url = latestReleaseUrl || `https://github.com/${UPDATE_REPO}/releases`;
+  await chrome.tabs.create({ url });
+  chrome.action.setBadgeText({ text: "" });
+};
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.alarms.create(UPDATE_ALARM_NAME, { periodInMinutes: UPDATE_CHECK_PERIOD_MIN });
+  checkForUpdate();
+});
+chrome.runtime.onStartup.addListener(() => {
+  checkForUpdate();
+});
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === UPDATE_ALARM_NAME) checkForUpdate();
+});
+chrome.action.onClicked.addListener(openReleasePage);
+chrome.notifications.onClicked.addListener((notifId) => {
+  if (!notifId.startsWith(UPDATE_NOTIF_ID_PREFIX)) return;
+  chrome.notifications.clear(notifId);
+  openReleasePage();
+});
+
 // =================== message handler ===================
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
