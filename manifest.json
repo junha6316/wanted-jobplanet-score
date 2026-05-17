@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Wanted × JobPlanet Score",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "원티드 채용공고에 잡플래닛·블라인드 평점과 사람인 평균연봉·영업이익을 자동으로 표시합니다.",
   "permissions": ["storage", "alarms", "notifications"],
   "host_permissions": [

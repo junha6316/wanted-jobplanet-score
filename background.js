@@ -49,6 +49,20 @@ const setCached = async (key, value) => {
   await chrome.storage.local.set({ [key]: { ts: Date.now(), value } });
 };
 
+// 같은 cacheKey로 동시에 들어온 요청은 첫 Promise를 공유한다.
+// 캐시 hit 경로(storage.local.get)와 네트워크 fetch 경로 모두를 묶기 위해
+// 각 fetcher의 최외곽을 감싼다. 같은 회사가 한 페이지에 여러 번 노출돼
+// 동시에 요청될 때 storage 조회/네트워크 호출의 중복을 모두 제거한다.
+const inflight = new Map();
+const dedupe = (key, work) => {
+  const existing = inflight.get(key);
+  if (existing) return existing;
+  const p = work();
+  inflight.set(key, p);
+  p.finally(() => inflight.delete(key));
+  return p;
+};
+
 const pickBest = (companies, query) => {
   if (companies.length === 0) return null;
   const qn = normalize(query);
@@ -108,43 +122,46 @@ const fetchJobPlanetReviewCount = async (companyId) => {
 const fetchJobPlanet = async (rawName) => {
   const normalized = normalize(rawName);
   const cacheKey = `jp:v${CACHE_VERSION.jp}:${normalized}`;
-  const cached = await getCached(cacheKey);
-  if (cached) return cached;
 
-  const override = COMPANY_MAP[normalized];
-  const searchQuery = override?.jpSearch || stripParens(rawName) || rawName;
+  return dedupe(cacheKey, async () => {
+    const cached = await getCached(cacheKey);
+    if (cached) return cached;
 
-  const url = `https://www.jobplanet.co.kr/search/companies?query=${encodeURIComponent(searchQuery)}`;
-  const res = await fetch(url, {
-    credentials: "include",
-    headers: { RSC: "1", Accept: "*/*", "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8" },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const override = COMPANY_MAP[normalized];
+    const searchQuery = override?.jpSearch || stripParens(rawName) || rawName;
 
-  const text = await res.text();
-  const companies = parseJobPlanetCompanies(text);
-  const overrideMatch = override?.jpId
-    ? companies.find((c) => c.id === override.jpId)
-    : null;
-  const best = overrideMatch ?? pickBest(companies, searchQuery);
+    const url = `https://www.jobplanet.co.kr/search/companies?query=${encodeURIComponent(searchQuery)}`;
+    const res = await fetch(url, {
+      credentials: "include",
+      headers: { RSC: "1", Accept: "*/*", "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8" },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-  if (!best) {
-    const result = { state: "not_found" };
+    const text = await res.text();
+    const companies = parseJobPlanetCompanies(text);
+    const overrideMatch = override?.jpId
+      ? companies.find((c) => c.id === override.jpId)
+      : null;
+    const best = overrideMatch ?? pickBest(companies, searchQuery);
+
+    if (!best) {
+      const result = { state: "not_found" };
+      await setCached(cacheKey, result);
+      return result;
+    }
+
+    const reviewCount = await fetchJobPlanetReviewCount(best.id);
+    const result = {
+      state: "ok",
+      rating: best.rating,
+      strength: best.strength,
+      reviewCount,
+      matchedName: best.name,
+      url: `https://www.jobplanet.co.kr/companies/${best.id}`,
+    };
     await setCached(cacheKey, result);
     return result;
-  }
-
-  const reviewCount = await fetchJobPlanetReviewCount(best.id);
-  const result = {
-    state: "ok",
-    rating: best.rating,
-    strength: best.strength,
-    reviewCount,
-    matchedName: best.name,
-    url: `https://www.jobplanet.co.kr/companies/${best.id}`,
-  };
-  await setCached(cacheKey, result);
-  return result;
+  });
 };
 
 // =================== Saramin ===================
@@ -192,42 +209,45 @@ const parseSaraminCompanies = (html) => {
 const fetchSaramin = async (rawName) => {
   const normalized = normalize(rawName);
   const cacheKey = `sr:v${CACHE_VERSION.sr}:${normalized}`;
-  const cached = await getCached(cacheKey);
-  if (cached) return cached;
 
-  const override = COMPANY_MAP[normalized];
-  const searchQuery = override?.srSearch || stripParens(rawName) || rawName;
+  return dedupe(cacheKey, async () => {
+    const cached = await getCached(cacheKey);
+    if (cached) return cached;
 
-  const url = `https://www.saramin.co.kr/zf_user/search/company?searchword=${encodeURIComponent(searchQuery)}`;
-  const res = await fetch(url, {
-    credentials: "include",
-    headers: { Accept: "text/html", "Accept-Language": "ko-KR,ko;q=0.9" },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const override = COMPANY_MAP[normalized];
+    const searchQuery = override?.srSearch || stripParens(rawName) || rawName;
 
-  const html = await res.text();
-  const companies = parseSaraminCompanies(html);
-  console.log("[WJP] saramin parsed", companies.length, companies.slice(0, 3));
+    const url = `https://www.saramin.co.kr/zf_user/search/company?searchword=${encodeURIComponent(searchQuery)}`;
+    const res = await fetch(url, {
+      credentials: "include",
+      headers: { Accept: "text/html", "Accept-Language": "ko-KR,ko;q=0.9" },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-  const overrideMatch = override?.srId
-    ? companies.find((c) => c.id === override.srId)
-    : null;
-  const best = overrideMatch ?? pickBest(companies, searchQuery);
-  if (!best || (!best.salary && !best.profit)) {
-    const result = { state: "not_found" };
+    const html = await res.text();
+    const companies = parseSaraminCompanies(html);
+    console.log("[WJP] saramin parsed", companies.length, companies.slice(0, 3));
+
+    const overrideMatch = override?.srId
+      ? companies.find((c) => c.id === override.srId)
+      : null;
+    const best = overrideMatch ?? pickBest(companies, searchQuery);
+    if (!best || (!best.salary && !best.profit)) {
+      const result = { state: "not_found" };
+      await setCached(cacheKey, result);
+      return result;
+    }
+
+    const result = {
+      state: "ok",
+      salary: best.salary,
+      profit: best.profit,
+      matchedName: best.name,
+      url: `https://www.saramin.co.kr/zf_user/company-info/view?csn=${encodeURIComponent(best.id)}`,
+    };
     await setCached(cacheKey, result);
     return result;
-  }
-
-  const result = {
-    state: "ok",
-    salary: best.salary,
-    profit: best.profit,
-    matchedName: best.name,
-    url: `https://www.saramin.co.kr/zf_user/company-info/view?csn=${encodeURIComponent(best.id)}`,
-  };
-  await setCached(cacheKey, result);
-  return result;
+  });
 };
 
 // =================== Blind ===================
@@ -248,42 +268,45 @@ const parseBlindRating = (html) => {
 const fetchBlind = async (rawName) => {
   const normalized = normalize(rawName);
   const cacheKey = `bl:v${CACHE_VERSION.bl}:${normalized}`;
-  const cached = await getCached(cacheKey);
-  if (cached) return cached;
 
-  const override = COMPANY_MAP[normalized];
-  const query = override?.blAlias || stripParens(rawName) || rawName;
-  const url = `https://www.teamblind.com/kr/company/${encodeURIComponent(query)}`;
+  return dedupe(cacheKey, async () => {
+    const cached = await getCached(cacheKey);
+    if (cached) return cached;
 
-  const res = await fetch(url, {
-    credentials: "omit",
-    headers: { Accept: "text/html", "Accept-Language": "ko-KR,ko;q=0.9" },
+    const override = COMPANY_MAP[normalized];
+    const query = override?.blAlias || stripParens(rawName) || rawName;
+    const url = `https://www.teamblind.com/kr/company/${encodeURIComponent(query)}`;
+
+    const res = await fetch(url, {
+      credentials: "omit",
+      headers: { Accept: "text/html", "Accept-Language": "ko-KR,ko;q=0.9" },
+    });
+
+    if (res.status === 404) {
+      const result = { state: "not_found" };
+      await setCached(cacheKey, result);
+      return result;
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const html = await res.text();
+    const parsed = parseBlindRating(html);
+    if (!parsed) {
+      const result = { state: "not_found" };
+      await setCached(cacheKey, result);
+      return result;
+    }
+
+    const result = {
+      state: "ok",
+      rating: parsed.rating,
+      reviewCount: parsed.reviewCount,
+      matchedName: parsed.matchedName,
+      url,
+    };
+    await setCached(cacheKey, result);
+    return result;
   });
-
-  if (res.status === 404) {
-    const result = { state: "not_found" };
-    await setCached(cacheKey, result);
-    return result;
-  }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-  const html = await res.text();
-  const parsed = parseBlindRating(html);
-  if (!parsed) {
-    const result = { state: "not_found" };
-    await setCached(cacheKey, result);
-    return result;
-  }
-
-  const result = {
-    state: "ok",
-    rating: parsed.rating,
-    reviewCount: parsed.reviewCount,
-    matchedName: parsed.matchedName,
-    url,
-  };
-  await setCached(cacheKey, result);
-  return result;
 };
 
 // =================== Update check (GitHub Releases) ===================
